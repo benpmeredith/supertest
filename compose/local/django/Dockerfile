@@ -3,17 +3,6 @@ FROM python:3.8-slim-buster
 ENV PYTHONUNBUFFERED 1
 ENV PYTHONDONTWRITEBYTECODE 1
 
-#==========================================================================
-# trying to use via vscode
-# ARG USER_UID=1000
-# ARG USER_GID=$USER_UID
-# RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then \
-#         groupmod --gid $USER_GID vscode \
-#         && usermod --uid $USER_UID --gid $USER_GID vscode \
-#         && chown -R $USER_UID:$USER_GID /home/vscode; \
-#     fi
-#==========================================================================
-
 RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential \
@@ -48,6 +37,30 @@ RUN chmod +x /start-celerybeat
 COPY ./compose/local/django/celery/flower/start /start-flower
 RUN sed -i 's/\r$//g' /start-flower
 RUN chmod +x /start-flower
+
+
+#=================================================================
+# adding some lines in from to fix git warning/error. 
+# Additionally, might fix the issue with vscode user
+# https://github.com/microsoft/vscode-dev-containers/blob/v0.134.0/containers/python-3/.devcontainer/base.Dockerfile
+# Options for common setup script
+ARG INSTALL_ZSH="true"
+ARG UPGRADE_PACKAGES="true"
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+# Install needed packages and setup non-root user. Use a separate RUN statement to add your own dependencies.
+COPY ./compose/local/django/library-scripts/common-debian.sh /tmp/library-scripts/
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    # Remove imagemagick due to https://security-tracker.debian.org/tracker/CVE-2019-10131
+    && apt-get purge -y imagemagick imagemagick-6-common \
+    # Install common packages, non-root user
+    && /bin/bash /tmp/library-scripts/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" \
+    # Clean up
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/* /tmp/library-scripts
+#=================================================================
+
 
 # WORKDIR /app
 WORKDIR /workspace
